@@ -155,16 +155,38 @@ def test_pose_model_movenet_is_a_stub_with_helpful_message():
     assert "movenet" in str(exc.value).lower()
 
 
-def test_real_tflite_filename_hits_the_unimplemented_loader(tmp_path):
-    """Confirms the stub is reached when path looks right but TFLite load isn't wired."""
-    from kc import ImageModel
+def test_malformed_tflite_file_raises_friendly_load_error(tmp_path):
+    """A .tflite path that exists but isn't a valid TFLite model should surface as ModelLoadError,
+    not as a raw flatbuffer/runtime exception from ai_edge_litert."""
+    from kc import ImageModel, ModelLoadError
 
     fake = tmp_path / "image_model.tflite"
-    fake.write_bytes(b"\x00" * 32)  # exists, ends in .tflite — passes both early checks
-    with pytest.raises(NotImplementedError) as exc:
+    fake.write_bytes(b"\x00" * 32)  # passes the existence + extension checks
+    with pytest.raises(ModelLoadError) as exc:
         ImageModel(str(fake))
-    # the stub message must point to what to wire next, not be a blind NotImplementedError
-    assert "ai_edge_litert" in str(exc.value) or "Interpreter" in str(exc.value)
+    assert "Teachable Machine" in str(exc.value)
+
+
+def test_pose_model_predict_still_stubbed(tmp_path):
+    """PoseModel inherits real loading from _BaseModel in v0.0.1, but predict() is still TODO.
+    Confirm the stub message says so clearly rather than blowing up obscurely."""
+    from kc import PoseModel, ModelLoadError
+
+    fake = tmp_path / "pose_model.tflite"
+    fake.write_bytes(b"\x00" * 32)
+    # We still expect ModelLoadError here (malformed file), not NotImplementedError —
+    # because load runs before predict. This pins the order-of-failure.
+    with pytest.raises(ModelLoadError):
+        PoseModel(str(fake))
+
+
+def test_image_model_exposes_raw_interpreter_via_property():
+    """The .interpreter escape hatch is part of the documented advanced surface."""
+    from kc import ImageModel
+
+    # Property exists at class level even without an instance.
+    assert hasattr(ImageModel, "interpreter")
+    assert isinstance(ImageModel.interpreter, property)
 
 
 # ---------- Camera (no webcam required) ----------
