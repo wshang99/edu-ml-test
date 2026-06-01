@@ -16,4 +16,5 @@ def predict_stream(camera: Camera, model: _BaseModel) -> Iterator[Prediction]:
     for frame in camera:
         result = model.predict(frame)
         camera.set_overlay(str(result))
+        camera.set_keypoints(result.keypoints)
         yield result

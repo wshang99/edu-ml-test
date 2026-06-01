@@ -38,9 +38,11 @@ Issues = "https://github.com/wshang99/edu-ml-test/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kc"]
+artifacts = ["src/kc/_weights/*.tflite"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/kc", "README.md", "LICENSE"]
+artifacts = ["src/kc/_weights/*.tflite"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

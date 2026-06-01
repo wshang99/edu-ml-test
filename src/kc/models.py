@@ -137,23 +137,50 @@ class ImageModel(_BaseModel):
 
 
 class PoseModel(_BaseModel):
-    """Pose classifier (TM Pose Project) or pretrained MoveNet.
+    """Pose detector (pretrained MoveNet) or Teachable Machine Pose Project export.
 
-    Predictions include result.keypoints — a dict of body part names to (x, y, confidence).
+    With the bundled MoveNet pretrained model, predictions include
+    result.keypoints — a dict of body part names to (x, y, confidence)
+    in pixel coordinates of the original frame (not mirror-corrected).
+
+    Use kc.PoseModel("movenet") for the pretrained path. TM Pose Project
+    exports are accepted as a path, but predict() handling is wired only
+    for MoveNet in this version.
     """
 
     _model_kind = "pose"
 
     def __init__(self, path_or_name: str) -> None:
         if path_or_name == "movenet":
-            raise NotImplementedError(
-                "Built-in 'movenet' is not wired yet. "
-                "v0.0.1 wires image classification only; pose comes next."
-            )
-        super().__init__(path_or_name)
+            from kc.movenet import weights_path
+            self._is_movenet = True
+            super().__init__(weights_path())
+        else:
+            self._is_movenet = False
+            super().__init__(path_or_name)
 
     def predict(self, frame: np.ndarray) -> Prediction:
+        if self._is_movenet:
+            return self._predict_movenet(frame)
         raise NotImplementedError(
-            "PoseModel.predict() is not wired yet — v0.0.1 only wires ImageModel. "
-            "Keypoint decoding and the MoveNet builtin land next."
+            "PoseModel.predict() for Teachable Machine pose exports is not wired yet. "
+            "For pretrained pose detection, use kc.PoseModel('movenet')."
+        )
+
+    def _predict_movenet(self, frame: np.ndarray) -> Prediction:
+        from kc.movenet import preprocess, decode, mean_confidence
+
+        in_det = self._input_details[0]
+        out_det = self._output_details[0]
+        _, mh, mw, _ = tuple(in_det["shape"])
+        x = preprocess(frame, int(mh), int(mw))
+        self._interpreter.set_tensor(in_det["index"], x)
+        self._interpreter.invoke()
+        raw = self._interpreter.get_tensor(out_det["index"])
+        frame_h, frame_w = frame.shape[:2]
+        keypoints = decode(raw, frame_h, frame_w)
+        return Prediction(
+            label="pose",
+            confidence=mean_confidence(keypoints),
+            keypoints=keypoints,
         )

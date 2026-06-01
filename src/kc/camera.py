@@ -18,6 +18,7 @@ class Camera:
         self._preview_open = False
         self._window_name = "kc camera"
         self._overlay_text: str | None = None
+        self._overlay_keypoints: dict | None = None
 
     def _ensure_open(self) -> cv2.VideoCapture:
         if self._cap is None:
@@ -47,33 +48,52 @@ class Camera:
         self._ensure_open()
 
     def set_overlay(self, text: str | None) -> None:
-        """Called by predict_stream to draw the current prediction onto the preview."""
+        """Called by predict_stream to set the top label rendered on the preview."""
         self._overlay_text = text
 
+    def set_keypoints(self, keypoints: dict | None) -> None:
+        """Called by predict_stream when a PoseModel is active. Skeleton auto-draws on the preview."""
+        self._overlay_keypoints = keypoints
+
     def _draw_overlay(self, frame: np.ndarray) -> np.ndarray:
-        if not self._overlay_text:
-            return frame
-        cv2.putText(
-            frame,
-            self._overlay_text,
-            (12, 36),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (0, 0, 0),
-            4,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            frame,
-            self._overlay_text,
-            (12, 36),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        if self._overlay_keypoints:
+            self._draw_skeleton(frame, self._overlay_keypoints)
+        if self._overlay_text:
+            cv2.putText(
+                frame, self._overlay_text, (12, 36),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 4, cv2.LINE_AA,
+            )
+            cv2.putText(
+                frame, self._overlay_text, (12, 36),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA,
+            )
         return frame
+
+    @staticmethod
+    def _draw_skeleton(frame: np.ndarray, keypoints: dict) -> None:
+        """Draw keypoint dots and connecting edges. Skips low-confidence points."""
+        from kc.movenet import SKELETON_EDGES  # local import: keep camera independent of model code at import time
+
+        conf_threshold = 0.3
+        # edges
+        for a, b in SKELETON_EDGES:
+            if a not in keypoints or b not in keypoints:
+                continue
+            ax, ay, ac = keypoints[a]
+            bx, by, bc = keypoints[b]
+            if ac < conf_threshold or bc < conf_threshold:
+                continue
+            pa = (int(ax), int(ay))
+            pb = (int(bx), int(by))
+            cv2.line(frame, pa, pb, (0, 0, 0), 4, cv2.LINE_AA)
+            cv2.line(frame, pa, pb, (0, 255, 255), 2, cv2.LINE_AA)
+        # joints
+        for name, (x, y, c) in keypoints.items():
+            if c < conf_threshold:
+                continue
+            p = (int(x), int(y))
+            cv2.circle(frame, p, 5, (0, 0, 0), -1, cv2.LINE_AA)
+            cv2.circle(frame, p, 3, (255, 255, 255), -1, cv2.LINE_AA)
 
     def _pump_preview(self, frame: np.ndarray) -> bool:
         """Called per frame. Returns False if the user closed the window."""

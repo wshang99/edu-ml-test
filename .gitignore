@@ -12,3 +12,4 @@ venv/
 .idea/
 .vscode/
 *.tflite
+!src/kc/_weights/*.tflite

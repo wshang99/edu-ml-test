@@ -147,12 +147,54 @@ def test_image_model_mobilenet_is_a_stub_with_helpful_message():
     assert "mobilenet" in str(exc.value).lower()
 
 
-def test_pose_model_movenet_is_a_stub_with_helpful_message():
-    from kc import PoseModel
+def test_pose_model_movenet_loads_and_predicts_on_synthetic_frame():
+    """End-to-end: bundled MoveNet weights load, predict runs, 17 named keypoints come back
+    in pixel coords of the original frame with sensible confidences."""
+    import numpy as np
 
-    with pytest.raises(NotImplementedError) as exc:
-        PoseModel("movenet")
-    assert "movenet" in str(exc.value).lower()
+    from kc import PoseModel, Prediction
+    from kc.movenet import KEYPOINT_NAMES
+
+    model = PoseModel("movenet")
+
+    # Synthetic 480x640 BGR uint8 frame — no real person; just checking the wiring.
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = model.predict(frame)
+
+    assert isinstance(result, Prediction)
+    assert result.label == "pose"
+    assert 0.0 <= result.confidence <= 1.0
+    assert result.keypoints is not None
+    # all 17 COCO names present, no extras
+    assert set(result.keypoints.keys()) == set(KEYPOINT_NAMES)
+    # each entry is (x, y, confidence); coords inside frame; conf in [0, 1]
+    for name, (x, y, c) in result.keypoints.items():
+        assert 0.0 <= x <= 640, f"{name} x={x} out of frame width"
+        assert 0.0 <= y <= 480, f"{name} y={y} out of frame height"
+        assert 0.0 <= c <= 1.0, f"{name} conf={c} out of [0,1]"
+
+
+def test_movenet_weights_file_is_bundled():
+    """The bundled .tflite must ship with the package — otherwise PoseModel('movenet') breaks."""
+    import os
+
+    from kc.movenet import weights_path
+
+    p = weights_path()
+    assert os.path.isfile(p), f"MoveNet weights not found at {p}"
+    # Sanity: file is non-trivially sized (real model is ~2-3 MB)
+    assert os.path.getsize(p) > 1_000_000
+
+
+def test_movenet_module_exports_skeleton_and_names():
+    from kc.movenet import KEYPOINT_NAMES, SKELETON_EDGES
+
+    assert len(KEYPOINT_NAMES) == 17
+    assert "nose" in KEYPOINT_NAMES
+    # every skeleton edge references real keypoint names
+    for a, b in SKELETON_EDGES:
+        assert a in KEYPOINT_NAMES
+        assert b in KEYPOINT_NAMES
 
 
 def test_malformed_tflite_file_raises_friendly_load_error(tmp_path):
@@ -167,15 +209,13 @@ def test_malformed_tflite_file_raises_friendly_load_error(tmp_path):
     assert "Teachable Machine" in str(exc.value)
 
 
-def test_pose_model_predict_still_stubbed(tmp_path):
-    """PoseModel inherits real loading from _BaseModel in v0.0.1, but predict() is still TODO.
-    Confirm the stub message says so clearly rather than blowing up obscurely."""
+def test_pose_model_with_malformed_path_raises_load_error(tmp_path):
+    """For non-movenet paths (e.g. a TM Pose Project export), load runs first.
+    A malformed file should surface the TM-aware ModelLoadError, same as ImageModel."""
     from kc import PoseModel, ModelLoadError
 
     fake = tmp_path / "pose_model.tflite"
     fake.write_bytes(b"\x00" * 32)
-    # We still expect ModelLoadError here (malformed file), not NotImplementedError —
-    # because load runs before predict. This pins the order-of-failure.
     with pytest.raises(ModelLoadError):
         PoseModel(str(fake))
 
