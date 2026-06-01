@@ -104,10 +104,28 @@ Even a thumbs-up is useful. If anything was friction:
 | Demo runs but predictions are wildly off | `labels.txt` isn't beside `model.tflite` | Put both files in the same folder as `demo.py` |
 | Q key doesn't close the window | Click the X button on the video window instead | Avoid `Ctrl+C` in the terminal — it leaves the camera in a weird state |
 
+## Bonus: try the pretrained pose detector (no training needed)
+
+Once Step 4 passes, you can also try the pretrained MoveNet pose detector — no Teachable Machine setup required. Create a second file `demo_pose.py` in the same project folder:
+
+```python
+import kc
+
+camera = kc.Camera()
+camera.show()
+model = kc.PoseModel("movenet")
+
+for result in kc.predict_stream(camera, model):
+    if result.is_confident:
+        nose_x, nose_y, _ = result.keypoints["nose"]
+        print(f"nose at ({int(nose_x)}, {int(nose_y)})")
+```
+
+Run it. You should see a skeleton drawn over yourself on the preview window. Pose models can run alongside image models — no extra install steps.
+
 ## What's intentionally not working yet
 
-- `kc.ImageModel("mobilenet")` — pretrained image classifier, not wired in this version
-- `kc.PoseModel(...)` — pose model support, not wired in this version
-- Anything beyond image classification with your own TM model
+- `kc.ImageModel("mobilenet")` — pretrained ImageNet classifier, not wired in this version
+- `kc.PoseModel("<path-to-TM-pose-export>.tflite")` — Teachable Machine Pose Projects load but `predict()` is stubbed. Use `kc.PoseModel("movenet")` for pretrained pose instead.
 
-If you try one of those, you'll see a `NotImplementedError` with a "not wired yet" message. That's expected, not a bug.
+If you hit one of those, you'll see a `NotImplementedError` with a "not wired yet" message. Expected, not a bug.

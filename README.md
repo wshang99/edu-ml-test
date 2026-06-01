@@ -15,12 +15,30 @@ Requires Python 3.10–3.14. Designed to install cleanly in a fresh PyCharm proj
 
 ## Quick start
 
+**Pose detection** with the bundled MoveNet pretrained model — no training required:
+
 ```python
 import kc
 
 camera = kc.Camera()
 camera.show()
+model = kc.PoseModel("movenet")
 
+for result in kc.predict_stream(camera, model):
+    if result.is_confident:
+        nose_x, nose_y, _ = result.keypoints["nose"]
+        print(f"nose at ({int(nose_x)}, {int(nose_y)})")
+```
+
+A skeleton is auto-drawn on the preview window.
+
+**Image classification** with your own Teachable Machine model:
+
+```python
+import kc
+
+camera = kc.Camera()
+camera.show()
 model = kc.ImageModel("my_model.tflite")
 
 for result in kc.predict_stream(camera, model):
